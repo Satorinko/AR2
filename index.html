@@ -3,9 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-    <title>画像ARビューアー（撮影機能付き）</title>
+    <title>画像ARビューアー（撮影・サイズ調整付き）</title>
+    
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    
+    <script src="https://raw.githack.com/fcor/arjs-gestures/master/dist/gestures.js"></script>
     
     <style>
         body { margin: 0; overflow: hidden; font-family: sans-serif; }
@@ -31,12 +34,25 @@
 
     <button id="snap-btn" title="写真を撮影"></button>
 
-    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" gltf-model="dracoDecoderPath: https://www.gstatic.com/draco/v1/decoders/;" renderer="preserveDrawingBuffer: true;">
+    <a-scene 
+        embedded 
+        arjs="sourceType: webcam; debugUIEnabled: false;" 
+        renderer="preserveDrawingBuffer: true;"
+        gesture-detector>
+        
         <a-assets>
             <img id="sakura-img" src="sakura.png">
         </a-assets>
 
-        <a-image src="#sakura-img" position="0 1.0 -5" width="1.5" height="1.5" look-at="[camera]"></a-image>
+        <a-image 
+            src="#sakura-img" 
+            position="0 1.0 -5" 
+            width="1.5" 
+            height="1.5" 
+            look-at="[camera]"
+            class="clickable"
+            gesture-handler="minScale: 0.2; maxScale: 5.0">
+        </a-image>
 
         <a-entity camera></a-entity>
     </a-scene>
@@ -44,30 +60,23 @@
     <script>
         // 写真撮影（キャプチャ）の処理
         document.getElementById('snap-btn').addEventListener('click', function() {
-            // A-Frameのキャンバス（AR画像）を取得
             const scene = document.querySelector('a-scene');
             const targetCanvas = scene.components.screenshot.getCanvas('perspective');
-            
-            // 背後のカメラ映像（Videoタグ）を取得
             const video = document.querySelector('video');
 
             if (!video) {
-                alert('カメラ映像が見つかりません。');
+                alert('カメラ映像が見つかりません。サイトのカメラ権限を許可してください。');
                 return;
             }
 
-            // カメラ映像とAR画像を合成するためのテンポラリキャンバスを作成
             const mergeCanvas = document.createElement('canvas');
             mergeCanvas.width = targetCanvas.width;
             mergeCanvas.height = targetCanvas.height;
             const ctx = mergeCanvas.getContext('2d');
 
-            // 1. 背景のカメラ映像を描画
             ctx.drawImage(video, 0, 0, mergeCanvas.width, mergeCanvas.height);
-            // 2. その上にAR画像を描画
             ctx.drawImage(targetCanvas, 0, 0, mergeCanvas.width, mergeCanvas.height);
 
-            // データURLに変換してダウンロード
             try {
                 const imgData = mergeCanvas.toDataURL('image/png');
                 const link = document.createElement('a');
@@ -75,7 +84,7 @@
                 link.href = imgData;
                 link.click();
             } catch (e) {
-                alert('ブラウザのセキュリティ制限により、画像を保存できませんでした。スクリーンショットをお試しください。');
+                alert('ブラウザのセキュリティ制限により、画像を保存できませんでした。画面のスクリーンショットをお試しください。');
                 console.error(e);
             }
         });
