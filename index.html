@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-    <title>画像ARビューアー（バグ修正版）</title>
+    <title>画像ARビューアー（完全版）</title>
     
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
@@ -42,9 +42,7 @@
         embedded 
         arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;" 
         renderer="preserveDrawingBuffer: true; antialias: true; alpha: true;"
-        gesture-detector>
-        
-        <a-assets>
+        gesture-detector> <a-assets>
             <img id="sakura-img" src="sakura.png">
         </a-assets>
 
@@ -54,16 +52,22 @@
             width="2" 
             height="2" 
             class="clickable"
-            gesture-handler="minScale: 0.1; maxScale: 10; rotationFactor: 2">
+            gesture-handler="minScale: 0.2; maxScale: 5.0; rotationFactor: 2">
         </a-image>
 
-        <a-entity camera></a-entity>
+        <a-entity camera raycaster="objects: .clickable" cursor="fuse: false; rayOrigin: mouse;"></a-entity>
     </a-scene>
 
     <script>
         // 写真撮影（キャプチャ）の処理
         document.getElementById('snap-btn').addEventListener('click', function() {
             const scene = document.querySelector('a-scene');
+            
+            // A-Frameのスクリーンショット機能でAR画像をキャプチャ
+            if (!scene.components.screenshot) {
+                alert('スクリーンショット機能が準備中です。少し待ってから再度お試しください。');
+                return;
+            }
             const targetCanvas = scene.components.screenshot.getCanvas('perspective');
             const video = document.querySelector('video');
 
@@ -72,42 +76,42 @@
                 return;
             }
 
-            // 合成用のキャンバスを作成。サイズをスマホ画面の解像度に合わせる
+            // 合成用のキャンバスを作成
             const mergeCanvas = document.createElement('canvas');
-            const dpr = window.devicePixelRatio || 1;
             
-            // 【バグ修正箇所】clientWidth / clientHeight を正しく取得できるように修正
-            mergeCanvas.width = window.innerWidth * dpr;
-            mergeCanvas.height = window.innerHeight * dpr;
+            // スマホ画面の実際の表示サイズを取得
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            
+            mergeCanvas.width = width;
+            mergeCanvas.height = height;
             
             const ctx = mergeCanvas.getContext('2d');
 
-            // 1. 背景のカメラ映像を描画（アスペクト比を保って画面いっぱいに描画）
+            // 1. 背景のカメラ映像を描画（縦横比を保って画面いっぱいに広げる）
             const videoWidth = video.videoWidth;
             const videoHeight = video.videoHeight;
             const videoAspectRatio = videoWidth / videoHeight;
-            const canvasAspectRatio = mergeCanvas.width / mergeCanvas.height;
+            const canvasAspectRatio = width / height;
 
             let drawWidth, drawHeight, drawX, drawY;
             if (videoAspectRatio > canvasAspectRatio) {
-                // ビデオの方が横長の場合、高さを合わせて横をカット
-                drawHeight = mergeCanvas.height;
+                drawHeight = height;
                 drawWidth = drawHeight * videoAspectRatio;
-                drawX = (mergeCanvas.width - drawWidth) / 2;
+                drawX = (width - drawWidth) / 2;
                 drawY = 0;
             } else {
-                // ビデオの方が縦長（または同じ）の場合、幅を合わせて縦をカット
-                drawWidth = mergeCanvas.width;
+                drawWidth = width;
                 drawHeight = drawWidth / videoAspectRatio;
                 drawX = 0;
-                drawY = (mergeCanvas.height - drawHeight) / 2;
+                drawY = (height - drawHeight) / 2;
             }
             ctx.drawImage(video, drawX, drawY, drawWidth, drawHeight);
 
-            // 2. その上にAR画像を描画（画面サイズに合わせて描画）
-            ctx.drawImage(targetCanvas, 0, 0, mergeCanvas.width, mergeCanvas.height);
+            // 2. その上にAR画像を描画（ぴったり重ねる）
+            ctx.drawImage(targetCanvas, 0, 0, width, height);
 
-            // データURLに変換してダウンロード
+            // 画像としてダウンロード保存
             try {
                 const imgData = mergeCanvas.toDataURL('image/png');
                 const link = document.createElement('a');
@@ -115,8 +119,13 @@
                 link.href = imgData;
                 link.click();
             } catch (e) {
-                alert('ブラウザのセキュリティ制限により、画像を保存できませんでした。画面のスクリーンショットをお試しください。');
-                console.error(e);
+                // 一部スマホブラウザ向けのフォールバック（別タブで画像を開く）
+                try {
+                    const imgData = mergeCanvas.toDataURL('image/png');
+                    window.open(imgData, '_blank');
+                } catch(err) {
+                    alert('保存に失敗しました。スマートフォンの通常のスクリーンショット機能をご利用ください。');
+                }
             }
         });
     </script>
