@@ -3,12 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-    <title>画像ARビューアー（完全版）</title>
+    <title>画像ARビューアー（決定版）</title>
     
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
-    
-    <script src="https://raw.githack.com/fcor/arjs-gestures/master/dist/gestures.js"></script>
     
     <style>
         body { margin: 0; overflow: hidden; font-family: sans-serif; }
@@ -40,55 +38,106 @@
 
     <a-scene 
         embedded 
-        arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;" 
-        renderer="preserveDrawingBuffer: true; antialias: true; alpha: true;"
-        gesture-detector> <a-assets>
+        arjs="sourceType: webcam; debugUIEnabled: false;" 
+        renderer="preserveDrawingBuffer: true; antialias: true; alpha: true;">
+        
+        <a-assets>
             <img id="sakura-img" src="sakura.png">
         </a-assets>
 
         <a-image 
+            id="ar-object"
             src="#sakura-img" 
             position="0 1.2 -4"
             width="2" 
-            height="2" 
-            class="clickable"
-            gesture-handler="minScale: 0.2; maxScale: 5.0; rotationFactor: 2">
+            height="2">
         </a-image>
 
-        <a-entity camera raycaster="objects: .clickable" cursor="fuse: false; rayOrigin: mouse;"></a-entity>
+        <a-entity camera></a-entity>
     </a-scene>
 
     <script>
-        // 写真撮影（キャプチャ）の処理
+        // ==========================================
+        // 1. 指での操作（回転・拡大縮小）の独自実装
+        // ==========================================
+        const arObject = document.getElementById('ar-object');
+        let initialTouchDist = 0;
+        let initialScale = { x: 2, y: 2 }; // 初期サイズ
+        let initialTouchX = 0;
+        let initialRotation = 0;
+
+        window.addEventListener('touchstart', function(e) {
+            if (e.touches.length === 1) {
+                // 1本指の場合：回転の準備
+                initialTouchX = e.touches[0].clientX;
+                initialRotation = arObject.getAttribute('rotation').y;
+            } else if (e.touches.length === 2) {
+                // 2本指の場合：拡大縮小の準備
+                initialTouchDist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                const currentScale = arObject.getAttribute('scale') || { x: 1, y: 1, z: 1 };
+                initialScale = { x: currentScale.x, y: currentScale.y };
+            }
+        });
+
+        window.addEventListener('touchmove', function(e) {
+            if (e.touches.length === 1 && initialTouchX !== 0) {
+                // 1本指スワイプ：水平回転（Y軸回転）
+                const deltaX = e.touches[0].clientX - initialTouchX;
+                // 感度調整（0.5）
+                const newRotation = initialRotation + deltaX * 0.5;
+                arObject.setAttribute('rotation', `0 ${newRotation} 0`);
+            } else if (e.touches.length === 2 && initialTouchDist !== 0) {
+                // 2本指ピンチ：拡大縮小
+                const currentDist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                const factor = currentDist / initialTouchDist;
+                
+                // 最小0.2倍、最大5倍の範囲に制限
+                let newScaleX = Math.max(0.2, Math.min(5.0, initialScale.x * factor));
+                let newScaleY = Math.max(0.2, Math.min(5.0, initialScale.y * factor));
+                
+                arObject.setAttribute('scale', `${newScaleX} ${newScaleY} 1`);
+            }
+        });
+
+        window.addEventListener('touchend', function(e) {
+            if (e.touches.length < 2) initialTouchDist = 0;
+            if (e.touches.length < 1) initialTouchX = 0;
+        });
+
+
+        // ==========================================
+        // 2. 写真撮影（キャプチャ）の処理
+        // ==========================================
         document.getElementById('snap-btn').addEventListener('click', function() {
             const scene = document.querySelector('a-scene');
             
-            // A-Frameのスクリーンショット機能でAR画像をキャプチャ
             if (!scene.components.screenshot) {
-                alert('スクリーンショット機能が準備中です。少し待ってから再度お試しください。');
+                alert('AR機能の読み込み中です。数秒待ってからもう一度押してください。');
                 return;
             }
+            
             const targetCanvas = scene.components.screenshot.getCanvas('perspective');
             const video = document.querySelector('video');
 
             if (!video) {
-                alert('カメラ映像が見つかりません。サイトのカメラ権限を許可してください。');
+                alert('カメラ映像が取得できません。');
                 return;
             }
 
-            // 合成用のキャンバスを作成
             const mergeCanvas = document.createElement('canvas');
-            
-            // スマホ画面の実際の表示サイズを取得
             const width = window.innerWidth;
             const height = window.innerHeight;
-            
             mergeCanvas.width = width;
             mergeCanvas.height = height;
-            
             const ctx = mergeCanvas.getContext('2d');
 
-            // 1. 背景のカメラ映像を描画（縦横比を保って画面いっぱいに広げる）
+            // カメラ映像をスマホ画面（縦向き）に合わせてトリミング描画
             const videoWidth = video.videoWidth;
             const videoHeight = video.videoHeight;
             const videoAspectRatio = videoWidth / videoHeight;
@@ -108,23 +157,23 @@
             }
             ctx.drawImage(video, drawX, drawY, drawWidth, drawHeight);
 
-            // 2. その上にAR画像を描画（ぴったり重ねる）
+            // その上にARオブジェクトを合成
             ctx.drawImage(targetCanvas, 0, 0, width, height);
 
-            // 画像としてダウンロード保存
             try {
-                const imgData = mergeCanvas.toDataURL('image/png');
+                const imgData = mergeCanvas.toToDataURL ? mergeCanvas.toDataURL('image/png') : mergeCanvas.toDataURL();
                 const link = document.createElement('a');
                 link.download = 'ar-photo_' + Date.now() + '.png';
                 link.href = imgData;
                 link.click();
             } catch (e) {
-                // 一部スマホブラウザ向けのフォールバック（別タブで画像を開く）
+                // ダウンロードがブロックされた場合の対応（別タブ展開）
                 try {
                     const imgData = mergeCanvas.toDataURL('image/png');
-                    window.open(imgData, '_blank');
+                    const newTab = window.open();
+                    newTab.document.body.innerHTML = `<img src="${imgData}" style="width:100%;">`;
                 } catch(err) {
-                    alert('保存に失敗しました。スマートフォンの通常のスクリーンショット機能をご利用ください。');
+                    alert('自動保存が制限されました。スマートフォンのスクリーンショット機能で撮影してください。');
                 }
             }
         });
