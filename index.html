@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-    <title>画像ARビューアー（決定版）</title>
+    <title>画像ARビューアー（位置調整版）</title>
     
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
@@ -48,7 +48,7 @@
         <a-image 
             id="ar-object"
             src="#sakura-img" 
-            position="0 1.2 -4"
+            position="0 0 -4" 
             width="2" 
             height="2">
         </a-image>
@@ -161,7 +161,8 @@
             ctx.drawImage(targetCanvas, 0, 0, width, height);
 
             try {
-                const imgData = mergeCanvas.toToDataURL ? mergeCanvas.toDataURL('image/png') : mergeCanvas.toDataURL();
+                // 一部のブラウザ向けのタイポ修正（toToDataURL -> toDataURL）
+                const imgData = mergeCanvas.toDataURL('image/png');
                 const link = document.createElement('a');
                 link.download = 'ar-photo_' + Date.now() + '.png';
                 link.href = imgData;
